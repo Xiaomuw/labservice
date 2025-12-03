@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    druid:
+      initial-size: 10
+      min-idle: 10
+      max-active: 50
+      max-wait: 60000
+
+logging:
+  level:
+    root: INFO
+    com.xiaomu.labservice: INFO
+  file:
+    name: /var/log/labservice/labservice.log
