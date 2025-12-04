@@ -12,6 +12,7 @@ import com.xiaomu.labservice.module.user.dto.*;
 import com.xiaomu.labservice.module.user.entity.User;
 import com.xiaomu.labservice.module.user.mapper.UserMapper;
 import com.xiaomu.labservice.module.user.service.UserService;
+import com.xiaomu.labservice.mq.producer.EmailProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -44,6 +45,7 @@ public class UserServiceImpl implements UserService {
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
     private final RedisUtil redisUtil;
+    private final EmailProducer emailProducer;
 
     @Override
     @Transactional
@@ -87,9 +89,7 @@ public class UserServiceImpl implements UserService {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         loginDTO.getUsername(),
-                        loginDTO.getPassword()
-                )
-        );
+                        loginDTO.getPassword()));
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         User user = findByUsername(userDetails.getUsername());
@@ -98,7 +98,7 @@ public class UserServiceImpl implements UserService {
         String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
         // 将 refresh token 存入 Redis
-        redisUtil.set(RedisKeyConstant.USER + user.getId() + ":refresh", refreshToken, 
+        redisUtil.set(RedisKeyConstant.USER + user.getId() + ":refresh", refreshToken,
                 Duration.ofDays(7).toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
 
         AuthResponseDTO response = new AuthResponseDTO();
@@ -142,9 +142,10 @@ public class UserServiceImpl implements UserService {
             User user = findByUsername(username);
             if (user != null) {
                 redisUtil.set(RedisKeyConstant.TOKEN_BLACKLIST + token, "1",
-                        jwtUtil.getExpirationDateFromToken(token) != null ?
-                                jwtUtil.getExpirationDateFromToken(token).getTime() - System.currentTimeMillis() :
-                                7200000L, java.util.concurrent.TimeUnit.MILLISECONDS);
+                        jwtUtil.getExpirationDateFromToken(token) != null
+                                ? jwtUtil.getExpirationDateFromToken(token).getTime() - System.currentTimeMillis()
+                                : 7200000L,
+                        java.util.concurrent.TimeUnit.MILLISECONDS);
                 redisUtil.delete(RedisKeyConstant.USER + user.getId() + ":refresh");
             }
         }
@@ -154,14 +155,14 @@ public class UserServiceImpl implements UserService {
     public void sendVerifyCode(String email) {
         // 生成6位验证码
         String code = String.valueOf((int) ((Math.random() * 9 + 1) * 100000));
-        
+
         // 存入 Redis，5分钟过期
         redisUtil.setString(RedisKeyConstant.VERIFY_CODE + email, code,
                 Duration.ofMinutes(5).toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
 
         // 通过 Kafka 发送邮件
-        // emailProducer.sendVerificationCode(email, code);
-        log.info("验证码已生成: {} -> {}", email, code);
+        emailProducer.sendVerificationCode(email, code);
+        log.info("验证码已生成并发送: {} -> {}", email, code);
     }
 
     @Override
@@ -255,22 +256,22 @@ public class UserServiceImpl implements UserService {
     public Page<UserVO> getUserList(Long page, Long size, String keyword) {
         Page<User> userPage = new Page<>(page, size);
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        
+
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w.like(User::getUsername, keyword)
                     .or().like(User::getEmail, keyword)
                     .or().like(User::getNickname, keyword));
         }
-        
+
         wrapper.orderByDesc(User::getCreatedAt);
         Page<User> result = userMapper.selectPage(userPage, wrapper);
-        
+
         Page<UserVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
         List<UserVO> voList = result.getRecords().stream()
                 .map(this::convertToVO)
                 .collect(Collectors.toList());
         voPage.setRecords(voList);
-        
+
         return voPage;
     }
 

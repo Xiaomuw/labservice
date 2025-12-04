@@ -3,7 +3,6 @@ package com.xiaomu.labservice.mq.consumer;
 import com.xiaomu.labservice.common.constant.KafkaTopicConstant;
 import com.xiaomu.labservice.mq.message.EmailMessage;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.mail.SimpleMailMessage;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@Profile("prod")
 @RequiredArgsConstructor
 public class EmailConsumer {
 
@@ -39,4 +37,3 @@ public class EmailConsumer {
         }
     }
 }
-
